@@ -3,6 +3,14 @@
 
 namespace merx {
 
+	ImVec4 Palette::get_color(int c) {
+		return color[c & (size-1)];
+	}
+
+	bool Palette::is_bold(int c) {
+		return size<=8 && c>=8;
+	}
+
 	GLuint Font::surface_to_texture(SDL_Surface *surface) {
 
 		GLuint gltex = 0;
@@ -14,7 +22,14 @@ namespace merx {
 		}
 
 		unsigned char *ptr = (unsigned char *) copy_surface->pixels;
-		for (int i=0; i<surface->w*surface->h; i++) {
+		int litx=-1;
+		int lity=-1;
+		int y=0;
+		for (int i=0, x=0; i<surface->w*surface->h; i++, x++) {
+			if (x==surface->w) {
+				x=0;
+				y++;
+			}
 			//std::cout << surface->pixels[i];
 			if (((unsigned char *) surface->pixels)[i]==0) {
 				*(ptr++) = 0;
@@ -22,11 +37,20 @@ namespace merx {
 				*(ptr++) = 0;
 				*(ptr++) = 0;
 			} else {
+				if (litx<0) {
+					litx=x;
+					lity=y;
+				}
 				*(ptr++) = 0xff;
 				*(ptr++) = 0xff;
 				*(ptr++) = 0xff;
 				*(ptr++) = 0xff;
 			}
+		}
+		if (litx<0) {
+			lit = ImVec2(0.0f, 0.0f);
+		} else {
+			lit = ImVec2((float)litx/surface->w, (float)lity/surface->h);
 		}
 		glGenTextures(1, &gltex);
 		if (gltex == 0) {
@@ -39,14 +63,14 @@ namespace merx {
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, copy_surface->pixels);
 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		SDL_FreeSurface(surface);
 		SDL_FreeSurface(copy_surface);
 		return gltex;
     }
 
-	Font::Font(const void *data, int size) {
+	void Font::init(const void *data, int size) {
 		gl_texture = 0;
 		this->width = 0;
 		this->height = 0;

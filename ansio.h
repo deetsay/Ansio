@@ -12,16 +12,16 @@ namespace ansio {
 		int width;
 	    int height;
 
-		//merx::Scii collection[256];
 		merx::Font *font;
 
-		ImVec4 palette[16];
+		merx::Palette *palette;
+
 		merx::Merx current;
 		merx::Merx defaultMerx;
 
 		merx::Merx *edit_area;
 
-		Ansio(merx::Font *font);
+		Ansio(merx::Font *font, merx::Palette *palette);
 		virtual ~Ansio();
 	};
 }

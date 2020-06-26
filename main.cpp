@@ -1,6 +1,12 @@
 /*
- * Mi Casa
+ *	Ansio
  *
+ *	TODO:
+ *	- open file from command line
+ *  - fix load & save
+ *  - undo
+ *  - palettes!
+ *  - hide control characters etc with options
  */
 
 // Based on Dear ImGui's standalone example application for SDL2 + OpenGL
@@ -20,12 +26,13 @@
 #include "ansio.h"
 #include "parser.h"
 
-#include "resources/topaz500.c"
 #include "resources/topaz1200.c"
 #include "resources/potnoodle.c"
 #include "resources/xen.c"
+#include "resources/lamers.c"
 
 std::string *filename;
+merx::Font topaz1200font;
 
 void load(ansio::Ansio *a) {
 	char *file = NULL;
@@ -73,16 +80,26 @@ void save(ansio::Ansio *a) {
 				int skipped_spaces = 0;
 				for (int x=0; x<a->width; x++, i++) {
 					int bg_new = a->edit_area[i].bg_color;
-					if (bg_color==0 && bg_new==0 && a->edit_area[i].character==' ') {
+					if (bg_new==0 && a->edit_area[i].character==' ') {
 						skipped_spaces++;
 					} else {
 						while (skipped_lines>0) {
 							ofile.put(0xa);
 							skipped_lines--;
 						}
-						while (skipped_spaces>0) {
-							ofile.put(' ');
-							skipped_spaces--;
+						if (skipped_spaces>0) {
+							if (bg_color != 0) {
+								ofile.put(27);
+								ofile.put('[');
+								ofile.put('4');
+								ofile.put('0');
+								ofile.put('m');
+							}
+							bg_color = 0;
+							while (skipped_spaces>0) {
+								ofile.put(' ');
+								skipped_spaces--;
+							}
 						}
 						int fg_new = a->edit_area[i].fg_color;
 						if (fg_color != fg_new || bg_color != bg_new) {
@@ -116,6 +133,12 @@ void save(ansio::Ansio *a) {
 					ofile.put(0xa);
 				}
 			}
+			ofile.put(0xa);
+			ofile.put(27);
+			ofile.put('[');
+			ofile.put('0');
+			ofile.put('m');
+			ofile.put(0xa);
 			ofile.close();
 		}
 
@@ -124,20 +147,30 @@ void save(ansio::Ansio *a) {
 	}
 }
 
-void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg, const ImVec2 p, ImDrawList *draw_list) {
-	draw_list->AddRectFilled(
+void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg, const ImVec2 p) {
+
+	ImDrawList* draw_list = ImGui::GetWindowDrawList();
+	draw_list->AddImage(
+		(void *)(intptr_t)font->gl_texture,
 		p,
 		ImVec2(p.x+font->width, p.y+font->height),
-		ImGui::ColorConvertFloat4ToU32(bg));
+		font->lit,
+		ImVec2(font->lit.x+0.0078125f, font->lit.y+0.0078125f),
+		ImGui::GetColorU32(bg));
 	float x = (float) (character&15) / 16.0f;
 	float y = (float) (character>>4) / 16.0f;
 	ImGui::Image(
 		(void *)(intptr_t)font->gl_texture,
 		ImVec2(font->width, font->height),
 		ImVec2(x, y),
-		ImVec2(x+0.0625, y+0.0625),
+		ImVec2(x+0.0625f, y+0.0625f),
 		fg,
 		ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+}
+
+void set_window_size(SDL_Window *window, ansio::Ansio *a) {
+	SDL_SetWindowSize(window,
+		a->font->width*(a->width+16+8), a->font->height*(a->height+2)+32);
 }
 
 int main(int argc, char *argv[]) {
@@ -173,29 +206,106 @@ int main(int argc, char *argv[]) {
     ImGuiStyle& style = ImGui::GetStyle();
     style.FrameBorderSize = 0.0f;
     style.FramePadding = ImVec2(0.0f,0.0f);
-    //style.WindowBorderSize = 0.0f;
-    //style.WindowPadding = ImVec2(0.0f,0.0f);
 
     style.WindowRounding = 0.0f;
     style.ChildRounding = 0.0f;
     style.FrameRounding = 0.0f;
-    //style.GrabRounding = 0.0f;
-    //style.PopupRounding = 0.0f;
-    //style.ScrollbarRounding = 0.0f;
 
     // Setup Platform/Renderer bindings
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL2_Init();
 
 	//merx::Font *topaz500font = new merx::Font(topaz500, sizeof(topaz500));
-	merx::Font *topaz1200font = new merx::Font(topaz1200, sizeof(topaz1200));
-	topaz1200font->width=8; topaz1200font->height=16;
-	merx::Font *potnoodlefont = new merx::Font(potnoodle, sizeof(potnoodle));
-	merx::Font *xenfont = new merx::Font(xen, sizeof(xen));
+	topaz1200font.init(topaz1200, sizeof(topaz1200));
+	topaz1200font.width=8;
+	topaz1200font.height=16;
+	merx::Font potnoodlefont;
+	potnoodlefont.init(potnoodle, sizeof(potnoodle));
+	merx::Font xenfont;
+	xenfont.init(xen, sizeof(xen));
+	merx::Font lamersfont;
+	lamersfont.init(lamers, sizeof(lamers));
 
-    ansio::Ansio *a = new ansio::Ansio(topaz1200font);
+	merx::Palette ks13pal;
+	ks13pal.size=4;
+	ks13pal.color[0] = ImVec4(0.0f, 0.332f, 0.664f, 1.0f);
+	ks13pal.color[1] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	ks13pal.color[2] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+	ks13pal.color[3] = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);
+	merx::Palette amipal;
+	amipal.size=8;
+	amipal.color[0] = ImVec4(0.664f, 0.664f, 0.664f, 1.0f);
+	amipal.color[1] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+	amipal.color[2] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	amipal.color[3] = ImVec4(0.3984f, 0.5313f, 0.73f, 1.0f);
+	amipal.color[4] = ImVec4(0.9297f, 0.2656f, 0.2656f, 1.0f);
+	amipal.color[5] = ImVec4(0.332f, 0.8633f, 0.332f, 1.0f);
+	amipal.color[6] = ImVec4(0.0f, 0.2656f, 0.8633f, 1.0f);
+	amipal.color[7] = ImVec4(0.9297f, 0.5977f, 0.0f, 1.0f);
 
-	SDL_SetWindowSize(window, a->font->width*(a->width+16+8), a->font->height*(a->height+4));
+	merx::Palette mwbpal;
+	mwbpal.size=8;
+	mwbpal.color[0] = ImVec4(0.582f, 0.582f, 0.582f, 1.0f);
+	mwbpal.color[1] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+	mwbpal.color[2] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	mwbpal.color[3] = ImVec4(0.23f, 0.4023f, 0.6328f, 1.0f);
+	mwbpal.color[4] = ImVec4(0.48f, 0.48f, 0.48f, 1.0f);
+	mwbpal.color[5] = ImVec4(0.6836f, 0.6836f, 0.6836f, 1.0f);
+	mwbpal.color[6] = ImVec4(0.664f, 0.5625f, 0.4844f, 1.0f);
+	mwbpal.color[7] = ImVec4(1.0f, 0.66f, 0.5898f, 1.0f);
+
+	merx::Palette bterm;
+	bterm.size=8;
+	bterm.color[0] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+	bterm.color[1] = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+	bterm.color[2] = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+	bterm.color[3] = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+	bterm.color[4] = ImVec4(0.0f, 0.0f, 1.0f, 1.0f);
+	bterm.color[5] = ImVec4(1.0f, 0.0f, 1.0f, 1.0f);
+	bterm.color[6] = ImVec4(0.0f, 1.0f, 1.0f, 1.0f);
+	bterm.color[7] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	merx::Palette dterm;
+	dterm.size=16;
+	dterm.color[0] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+	dterm.color[1] = ImVec4(0.73f, 0.0f, 0.0f, 1.0f);
+	dterm.color[2] = ImVec4(0.0f, 0.73f, 0.0f, 1.0f);
+	dterm.color[3] = ImVec4(0.73f, 0.73f, 0.0f, 1.0f);
+	dterm.color[4] = ImVec4(0.0f, 0.0f, 0.73f, 1.0f);
+	dterm.color[5] = ImVec4(0.73f, 0.0f, 0.73f, 1.0f);
+	dterm.color[6] = ImVec4(0.0f, 0.73f, 0.73f, 1.0f);
+	dterm.color[7] = ImVec4(0.73f, 0.73f, 0.73f, 1.0f);
+	dterm.color[8] = ImVec4(0.33f, 0.33f, 0.33f, 1.0f);
+	dterm.color[9] = ImVec4(1.0f, 0.33f, 0.33f, 1.0f);
+	dterm.color[10] = ImVec4(0.33f, 1.0f, 0.33f, 1.0f);
+	dterm.color[11] = ImVec4(1.0f, 1.0f, 0.33f, 1.0f);
+	dterm.color[12] = ImVec4(0.33f, 0.33f, 1.0f, 1.0f);
+	dterm.color[13] = ImVec4(1.0f, 0.33f, 1.0f, 1.0f);
+	dterm.color[14] = ImVec4(0.33f, 1.0f, 1.0f, 1.0f);
+	dterm.color[15] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	merx::Palette vgapal;
+	vgapal.size=16;
+	vgapal.color[0] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+	vgapal.color[1] = ImVec4(0.0f, 0.0f, 0.664f, 1.0f);
+	vgapal.color[2] = ImVec4(0.0f, 0.664f, 0.0f, 1.0f);
+	vgapal.color[3] = ImVec4(0.0f, 0.664f, 0.664f, 1.0f);
+	vgapal.color[4] = ImVec4(0.664f, 0.0f, 0.0f, 1.0f);
+	vgapal.color[5] = ImVec4(0.664f, 0.0f, 0.664f, 1.0f);
+	vgapal.color[6] = ImVec4(0.664f, 0.332f, 0.0f, 1.0f);
+	vgapal.color[7] = ImVec4(0.664f, 0.664f, 0.664f, 1.0f);
+	vgapal.color[8] = ImVec4(0.332f, 0.332f, 0.332f, 1.0f);
+	vgapal.color[9] = ImVec4(0.332f, 0.332f, 1.0f, 1.0f);
+	vgapal.color[10] = ImVec4(0.332f, 1.0f, 0.332f, 1.0f);
+	vgapal.color[11] = ImVec4(0.332f, 1.0f, 1.0f, 1.0f);
+	vgapal.color[12] = ImVec4(1.0f, 0.332f, 0.332f, 1.0f);
+	vgapal.color[13] = ImVec4(1.0f, 0.332f, 1.0f, 1.0f);
+	vgapal.color[14] = ImVec4(1.0f, 1.0f, 0.332f, 1.0f);
+	vgapal.color[15] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+    ansio::Ansio *a = new ansio::Ansio(&topaz1200font, &ks13pal);
+
+	set_window_size(window, a);
 
 	filename = NULL;
 	bool done = false;
@@ -282,28 +392,54 @@ int main(int argc, char *argv[]) {
 				ImGui::Checkbox("DblPAL", &dblpal);
 				if (a->font->height==16 && dblpal==true) {
 					a->font->height=8;
-					SDL_SetWindowSize(window, a->font->width*(a->width+16+8), a->font->height*(a->height+4));
+					set_window_size(window, a);
 				}
-				ImGui::Separator();
 				if (a->font->height==8 && dblpal==false) {
 					a->font->height=16;
-					SDL_SetWindowSize(window, a->font->width*(a->width+16+8), a->font->height*(a->height+4));
+					set_window_size(window, a);
 				}
+				ImGui::Separator();
 				static int fontsel = 0;
 				if (ImGui::RadioButton("Topaz", &fontsel, 0)) {
-					a->font = topaz1200font;
+					a->font = &topaz1200font;
 					a->font->width=8; a->font->height=16;
-					SDL_SetWindowSize(window, a->font->width*(a->width+16+8), a->font->height*(a->height+4));
+					set_window_size(window, a);
 				}
 				if (ImGui::RadioButton("P0T-NOoDLE", &fontsel, 1)) {
-					a->font = potnoodlefont;
+					a->font = &potnoodlefont;
 					a->font->width=8; a->font->height=16;
-					SDL_SetWindowSize(window, a->font->width*(a->width+16+8), a->font->height*(a->height+4));
+					set_window_size(window, a);
 				}
-				if (ImGui::RadioButton("Xen", &fontsel, 2)) {
-					a->font = xenfont;
+				if (ImGui::RadioButton("Lamererz", &fontsel, 2)) {
+					a->font = &lamersfont;
+					set_window_size(window, a);
+				}
+				if (ImGui::RadioButton("Xen", &fontsel, 3)) {
+					a->font = &xenfont;
 					a->font->height=16;
-					SDL_SetWindowSize(window, a->font->width*(a->width+16+8), a->font->height*(a->height+4));
+					set_window_size(window, a);
+				}
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Palette")) {
+				static int palsel = 0;
+				if (ImGui::RadioButton("WB1.3", &palsel, 0)) {
+					a->palette = &ks13pal;
+				}
+				if (ImGui::RadioButton("WB2.05", &palsel, 1)) {
+					a->palette = &amipal;
+				}
+				if (ImGui::RadioButton("MagicWB", &palsel, 2)) {
+					a->palette = &mwbpal;
+				}
+				if (ImGui::RadioButton("Bold terminal", &palsel, 3)) {
+					a->palette = &bterm;
+				}
+				if (ImGui::RadioButton("Dim terminal", &palsel, 4)) {
+					a->palette = &dterm;
+				}
+				if (ImGui::RadioButton("Lamererz", &palsel, 5)) {
+					a->palette = &vgapal;
 				}
 				ImGui::EndMenu();
 			}
@@ -316,13 +452,10 @@ int main(int argc, char *argv[]) {
 
 		ImGui::SetColumnWidth(-1, a->font->width*16);
 
-		ImDrawList* draw_list = ImGui::GetWindowDrawList();
-
 		for (int y=0, i=0; y<16; y++) {
 			for (int x=0; x<16; x++, i++) {
-				ImGui::PushID(i);
 				const ImVec2 p = ImGui::GetCursorScreenPos();
-				draw_char(a->font, i, a->palette[a->current.fg_color], a->palette[a->current.bg_color], p, draw_list);
+				draw_char(a->font, i, a->palette->get_color(a->current.fg_color), a->palette->get_color(a->current.bg_color), p);
 				if (ImGui::IsItemHovered()) {
 					if (ImGui::IsMouseDown(0)) {
 						a->current.character = i;
@@ -331,7 +464,6 @@ int main(int argc, char *argv[]) {
 				if (x<15) {
 					ImGui::SameLine();
 				}
-				ImGui::PopID();
 			}
 		}
 
@@ -340,7 +472,15 @@ int main(int argc, char *argv[]) {
 
 		for (int pal=0; pal<16; pal++) {
 			const ImVec2 p = ImGui::GetCursorScreenPos();
-			draw_list->AddRectFilled(p, ImVec2(p.x+32, p.y+16), ImGui::ColorConvertFloat4ToU32(a->palette[pal]));
+			ImGui::Image(
+				(void *)(intptr_t)topaz1200font.gl_texture,
+				ImVec2(32.0f, 16.0f),
+				ImVec2(0.0f, 0.0f),
+				ImVec2(0.0625f / topaz1200font.width, 0.0625f / topaz1200font.height),
+				a->palette->get_color(pal),
+				ImVec4(0.0f, 0.0f, 0.0f, 0.0f)
+			);
+			ImGui::SetCursorScreenPos(p);
 			ImGui::Text("    ");
 			if (ImGui::IsItemHovered()) {
 				if (ImGui::IsMouseDown(0)) {
@@ -352,13 +492,12 @@ int main(int argc, char *argv[]) {
 		}
 
 		ImGui::NextColumn();
+
 		for (int y=0, i=0; y<a->height; y++) {
 			for (int x=0; x<a->width; x++, i++) {
-				ImGui::PushID(i);
-				//a->edit_area[i].render(a->current, a->collection, a->palette);
 				merx::Merx *m = &a->edit_area[i];
 				const ImVec2 p = ImGui::GetCursorScreenPos();
-				draw_char(a->font, m->character, a->palette[m->fg_color], a->palette[m->bg_color], p, draw_list);
+				draw_char(a->font, m->character, a->palette->get_color(m->fg_color), a->palette->get_color(m->bg_color), p);
 				if (ImGui::IsItemHovered()) {
 					showcursor = false;
 					hover.x = x;
@@ -375,28 +514,24 @@ int main(int argc, char *argv[]) {
 					} else {
 						ImGui::SetCursorScreenPos(p);
 						float alpa = (float) (sin((double)SDL_GetTicks()/128)*0.45f)+0.5f;
-						ImVec4 bg = a->palette[a->current.bg_color];
-						ImVec4 ehb_bg = ImVec4(bg.x, bg.y, bg.z, alpa);
-						ImVec4 fg = a->palette[a->current.fg_color];
+						ImVec4 fg = a->palette->get_color(a->current.fg_color);
 						ImVec4 ehb_fg = ImVec4(fg.x, fg.y, fg.z, alpa);
-						draw_char(a->font, a->current.character, ehb_fg, ehb_bg, p, draw_list);
+						ImVec4 bg = a->palette->get_color(a->current.bg_color);
+						ImVec4 ehb_bg = ImVec4(bg.x, bg.y, bg.z, alpa);
+						draw_char(a->font, a->current.character, ehb_fg, ehb_bg, p);
 					}
 				}
-
-
-
 				if (x<a->width-1) {
 					ImGui::SameLine();
 				}
-				ImGui::PopID();
 			}
 		}
 
 		if (hover.character != -1) {
-			std::string status = "x=" + std::to_string(hover.x) + " y=" + std::to_string(hover.y)
-				+ " char=" + std::to_string(hover.character);
-			//status << hover.x << " Y=" << hover.y;
-			ImGui::Text(status.c_str());
+			//char *status = new char[80];
+			//sprintf(status, );
+			ImGui::Text("x=%d y=%d char=%d", hover.x, hover.y, hover.character);
+			//delete [] status;
 		}
 
 		ImGui::PopStyleVar();

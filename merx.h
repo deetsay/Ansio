@@ -12,12 +12,23 @@ namespace merx {
 	private:
 		GLuint surface_to_texture(SDL_Surface *surface);
 	public:
+		ImVec2 lit;
 		int width;
 		int height;
-		GLuint gl_texture;
+		GLuint gl_texture = 0;
 
-		Font(const void *data, int size);
+		void init(const void *data, int size);
 		~Font();
+	};
+
+	class Palette {
+	private:
+	public:
+		ImVec4 color[16];
+		int size;
+
+		ImVec4 get_color(int c);
+		bool is_bold(int c);
 	};
 
 	class Merx {
