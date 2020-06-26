@@ -1,0 +1,2 @@
+#define ansio_VERSION_MAJOR @ansio_VERSION_MAJOR@
+#define ansio_VERSION_MINOR @ansio_VERSION_MINOR@
