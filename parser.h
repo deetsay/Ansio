@@ -1,11 +1,16 @@
 #include <iostream>
 #include <fstream>
+#include <vector>
 
 #include "merx.h"
 
 namespace parser {
 	class Parser {
 	private:
+		std::vector<char> csi_buf;
+		int csi_idx;
+		bool csi_done;
+
 		char c;
 		bool load_done;
 		int fg_color;
@@ -17,10 +22,11 @@ namespace parser {
 		int y;
 		std::ifstream *ifile;
 
+		bool get();
 		void write(int character);
 
-		bool get();
-		void parse_cmd();
+		int parse_csi_num(int default_num, int invalid_num);
+		void parse_csi();
 		void parse_esc();
 
 	public:

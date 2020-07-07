@@ -4,9 +4,12 @@
  *	TODO:
  *	- open file from command line
  *  - fix load & save
+ *   - linefeeds
  *  - undo
- *  - palettes!
- *  - hide control characters etc with options
+ *  - bold
+ *  - italic
+ *  - underscore
+ *  - hide/mark control characters etc with options
  */
 
 // Based on Dear ImGui's standalone example application for SDL2 + OpenGL
@@ -26,6 +29,7 @@
 #include "ansio.h"
 #include "parser.h"
 
+#include "resources/topaz500.c"
 #include "resources/topaz1200.c"
 #include "resources/potnoodle.c"
 #include "resources/xen.c"
@@ -147,7 +151,8 @@ void save(ansio::Ansio *a) {
 	}
 }
 
-void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg, const ImVec2 p) {
+void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg,
+	const ImVec2 p, bool bold) {
 
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 	draw_list->AddImage(
@@ -159,13 +164,23 @@ void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg, const ImVe
 		ImGui::GetColorU32(bg));
 	float x = (float) (character&15) / 16.0f;
 	float y = (float) (character>>4) / 16.0f;
+	if (bold) {
+		draw_list->AddImage(
+			(void *)(intptr_t)font->gl_texture,
+			ImVec2(p.x+1, p.y),
+			ImVec2(p.x+1+font->width, p.y+font->height),
+			ImVec2(x, y),
+			ImVec2(x+0.0625f, y+0.0625f),
+			ImGui::GetColorU32(fg));
+	}
 	ImGui::Image(
 		(void *)(intptr_t)font->gl_texture,
 		ImVec2(font->width, font->height),
 		ImVec2(x, y),
 		ImVec2(x+0.0625f, y+0.0625f),
 		fg,
-		ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ImVec4(0.0f, 0.0f, 0.0f, 0.0f)
+	);
 }
 
 void set_window_size(SDL_Window *window, ansio::Ansio *a) {
@@ -201,8 +216,8 @@ int main(int argc, char *argv[]) {
     //io.Fonts->AddFontFromMemoryCompressedTTF(potnoodle_compressed_data, potnoodle_compressed_size, 16.0f);
 
     // Setup Dear ImGui style
-    ImGui::StyleColorsLight();
-    //ImGui::StyleColorsClassic();
+    //ImGui::StyleColorsLight();
+    ImGui::StyleColorsClassic();
     ImGuiStyle& style = ImGui::GetStyle();
     style.FrameBorderSize = 0.0f;
     style.FramePadding = ImVec2(0.0f,0.0f);
@@ -216,6 +231,9 @@ int main(int argc, char *argv[]) {
     ImGui_ImplOpenGL2_Init();
 
 	//merx::Font *topaz500font = new merx::Font(topaz500, sizeof(topaz500));
+	merx::Font topaz500font;
+	topaz500font.init(topaz500, sizeof(topaz500));
+	merx::Font topaz1200font;
 	topaz1200font.init(topaz1200, sizeof(topaz1200));
 	topaz1200font.width=8;
 	topaz1200font.height=16;
@@ -303,7 +321,7 @@ int main(int argc, char *argv[]) {
 	vgapal.color[14] = ImVec4(1.0f, 1.0f, 0.332f, 1.0f);
 	vgapal.color[15] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
-    ansio::Ansio *a = new ansio::Ansio(&topaz1200font, &ks13pal);
+    ansio::Ansio *a = new ansio::Ansio(&topaz1200font, &bterm);
 
 	set_window_size(window, a);
 
@@ -316,11 +334,7 @@ int main(int argc, char *argv[]) {
 		bool showcursor = true;
 		merx::Undo hover;
 		hover.character = -1;
-        // Poll and handle events (inputs, window resize, etc.)
-        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -389,7 +403,7 @@ int main(int argc, char *argv[]) {
 			}
 			if (ImGui::BeginMenu("Font")) {
 				static bool dblpal = false;
-				ImGui::Checkbox("DblPAL", &dblpal);
+				ImGui::Checkbox("Scandoubler", &dblpal);
 				if (a->font->height==16 && dblpal==true) {
 					a->font->height=8;
 					set_window_size(window, a);
@@ -399,22 +413,27 @@ int main(int argc, char *argv[]) {
 					set_window_size(window, a);
 				}
 				ImGui::Separator();
-				static int fontsel = 0;
+				static int fontsel = 1;
 				if (ImGui::RadioButton("Topaz", &fontsel, 0)) {
+					a->font = &topaz500font;
+					a->font->width=8; a->font->height=16;
+					set_window_size(window, a);
+				}
+				if (ImGui::RadioButton("Topaz New", &fontsel, 1)) {
 					a->font = &topaz1200font;
 					a->font->width=8; a->font->height=16;
 					set_window_size(window, a);
 				}
-				if (ImGui::RadioButton("P0T-NOoDLE", &fontsel, 1)) {
+				if (ImGui::RadioButton("P0T-NOoDLE", &fontsel, 2)) {
 					a->font = &potnoodlefont;
 					a->font->width=8; a->font->height=16;
 					set_window_size(window, a);
 				}
-				if (ImGui::RadioButton("Lamererz", &fontsel, 2)) {
+				if (ImGui::RadioButton("EGA/VGA", &fontsel, 3)) {
 					a->font = &lamersfont;
 					set_window_size(window, a);
 				}
-				if (ImGui::RadioButton("Xen", &fontsel, 3)) {
+				if (ImGui::RadioButton("Xen", &fontsel, 4)) {
 					a->font = &xenfont;
 					a->font->height=16;
 					set_window_size(window, a);
@@ -422,23 +441,23 @@ int main(int argc, char *argv[]) {
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Palette")) {
-				static int palsel = 0;
-				if (ImGui::RadioButton("WB1.3", &palsel, 0)) {
+				static int palsel = 3;
+				if (ImGui::RadioButton("Workbench", &palsel, 0)) {
 					a->palette = &ks13pal;
 				}
-				if (ImGui::RadioButton("WB2.05", &palsel, 1)) {
+				if (ImGui::RadioButton("Workbench New", &palsel, 1)) {
 					a->palette = &amipal;
 				}
 				if (ImGui::RadioButton("MagicWB", &palsel, 2)) {
 					a->palette = &mwbpal;
 				}
-				if (ImGui::RadioButton("Bold terminal", &palsel, 3)) {
+				if (ImGui::RadioButton("Terminal", &palsel, 3)) {
 					a->palette = &bterm;
 				}
-				if (ImGui::RadioButton("Dim terminal", &palsel, 4)) {
+				if (ImGui::RadioButton("Terminal Dim", &palsel, 4)) {
 					a->palette = &dterm;
 				}
-				if (ImGui::RadioButton("Lamererz", &palsel, 5)) {
+				if (ImGui::RadioButton("VGA", &palsel, 5)) {
 					a->palette = &vgapal;
 				}
 				ImGui::EndMenu();
@@ -446,16 +465,18 @@ int main(int argc, char *argv[]) {
 			ImGui::EndMainMenuBar();
 		}
 
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
-		ImGui::Columns(3, NULL, false);
+		ImGui::Columns(2, NULL, false);
 
-		ImGui::SetColumnWidth(-1, a->font->width*16);
+		ImGui::SetColumnWidth(-1, (a->font->width+1)*16);
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.0f, 1.0f));
 
 		for (int y=0, i=0; y<16; y++) {
 			for (int x=0; x<16; x++, i++) {
 				const ImVec2 p = ImGui::GetCursorScreenPos();
-				draw_char(a->font, i, a->palette->get_color(a->current.fg_color), a->palette->get_color(a->current.bg_color), p);
+				draw_char(a->font, i, a->palette->get_color(a->current.fg_color), a->palette->get_color(a->current.bg_color), p,
+					((a->palette->size <= 8) && (a->current.fg_color>=8)));
 				if (ImGui::IsItemHovered()) {
 					if (ImGui::IsMouseDown(0)) {
 						a->current.character = i;
@@ -467,21 +488,34 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		ImGui::NextColumn();
-		ImGui::SetColumnWidth(-1, a->font->width*4);
-
-		for (int pal=0; pal<16; pal++) {
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, a->palette->get_color(a->current.bg_color));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, a->palette->get_color(a->current.bg_color));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		//ImGui::NextColumn();
+		//ImGui::SetColumnWidth(-1, a->font->width*4);
+		int x=0;
+		for (int pal=0; pal<a->palette->size; pal++) {
 			const ImVec2 p = ImGui::GetCursorScreenPos();
-			ImGui::Image(
+			if (pal==a->current.fg_color) {
+				ImGui::PopStyleColor();
+				ImGui::PushStyleColor(ImGuiCol_Button, a->palette->get_color(a->current.bg_color));
+			}
+			ImGui::ImageButton(
 				(void *)(intptr_t)topaz1200font.gl_texture,
-				ImVec2(32.0f, 16.0f),
-				ImVec2(0.0f, 0.0f),
-				ImVec2(0.0625f / topaz1200font.width, 0.0625f / topaz1200font.height),
-				a->palette->get_color(pal),
-				ImVec4(0.0f, 0.0f, 0.0f, 0.0f)
+				ImVec2(24.0f, 24.0f),
+				topaz1200font.lit,
+				ImVec2(topaz1200font.lit.x+0.0078125f, topaz1200font.lit.y+0.0078125f),
+				3,
+				pal==a->current.fg_color ? a->palette->get_color(a->current.bg_color) :
+					ImVec4(0.0f, 0.0f, 0.0f, 0.1f),
+				a->palette->get_color(pal)
 			);
-			ImGui::SetCursorScreenPos(p);
-			ImGui::Text("    ");
+			if (pal==a->current.fg_color) {
+				ImGui::PopStyleColor();
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+			}
+			//ImGui::SetCursorScreenPos(p);
+			//ImGui::Text("    ");
 			if (ImGui::IsItemHovered()) {
 				if (ImGui::IsMouseDown(0)) {
 					a->current.fg_color = pal;
@@ -489,15 +523,25 @@ int main(int argc, char *argv[]) {
 					a->current.bg_color = pal;
 				}
 			}
+			x++;
+			x = x & 3;
+			if (x != 0) {
+				ImGui::SameLine();
+			}
 		}
+		ImGui::PopStyleColor(3);
+		ImGui::PopStyleVar();
 
 		ImGui::NextColumn();
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
 		for (int y=0, i=0; y<a->height; y++) {
 			for (int x=0; x<a->width; x++, i++) {
 				merx::Merx *m = &a->edit_area[i];
 				const ImVec2 p = ImGui::GetCursorScreenPos();
-				draw_char(a->font, m->character, a->palette->get_color(m->fg_color), a->palette->get_color(m->bg_color), p);
+				draw_char(a->font, m->character, a->palette->get_color(m->fg_color), a->palette->get_color(m->bg_color), p,
+					((a->palette->size <= 8) && (m->fg_color>=8)));
 				if (ImGui::IsItemHovered()) {
 					showcursor = false;
 					hover.x = x;
@@ -518,7 +562,8 @@ int main(int argc, char *argv[]) {
 						ImVec4 ehb_fg = ImVec4(fg.x, fg.y, fg.z, alpa);
 						ImVec4 bg = a->palette->get_color(a->current.bg_color);
 						ImVec4 ehb_bg = ImVec4(bg.x, bg.y, bg.z, alpa);
-						draw_char(a->font, a->current.character, ehb_fg, ehb_bg, p);
+						draw_char(a->font, a->current.character, ehb_fg, ehb_bg, p,
+							((a->palette->size <= 8) && (a->current.fg_color>=8)));
 					}
 				}
 				if (x<a->width-1) {
@@ -528,10 +573,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (hover.character != -1) {
-			//char *status = new char[80];
-			//sprintf(status, );
 			ImGui::Text("x=%d y=%d char=%d", hover.x, hover.y, hover.character);
-			//delete [] status;
 		}
 
 		ImGui::PopStyleVar();
