@@ -4,11 +4,19 @@
 namespace merx {
 
 	ImVec4 Palette::get_color(int c) {
-		return color[c & (size-1)];
+		return color[c & (color.size()-1)];
 	}
 
 	bool Palette::is_bold(int c) {
-		return size<=8 && c>=8;
+		return color.size()<=8 && c>=8;
+	}
+
+	void Palette::push_back(int rgb) {
+		color.push_back(
+			ImVec4((float)((rgb>>16) & 0xff) / 255.0,
+			(float)((rgb>>8) & 0xff) / 255.0,
+			(float)(rgb & 0xff) / 255.0,
+			1.0f));
 	}
 
 	GLuint Font::surface_to_texture(SDL_Surface *surface) {
@@ -70,10 +78,12 @@ namespace merx {
 		return gltex;
     }
 
-	void Font::init(const void *data, int size) {
+	void Font::init(std::string name, const void *data, int size, bool scandoubler) {
 		gl_texture = 0;
 		this->width = 0;
 		this->height = 0;
+		this->scandoubler = scandoubler;
+		this->name = name;
 		SDL_RWops *rw = SDL_RWFromConstMem(data, size);
 		if (rw != NULL) {
 			SDL_Surface *surface = IMG_LoadPNG_RW(rw);

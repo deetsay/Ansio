@@ -142,15 +142,6 @@ namespace parser {
 		}
 	}
 
-	void Parser::parse_esc() {
-		if (get() && c=='[') {
-			parse_csi();
-		} else {
-			write(27);
-			write(c);
-		}
-	}
-
 	void Parser::parse_ansi() {
 		x = 0;
 		y = 0;
@@ -167,7 +158,12 @@ namespace parser {
 				was_d = false;
 			}
 			if (c==27) {
-				parse_esc();
+				if (get() && c=='[') {
+					parse_csi();
+				} else {
+					write(27);
+					write(c);
+				}
 			} else if (c==0x0d) {
 				was_d = true;
 			} else if (c==0x0a) {

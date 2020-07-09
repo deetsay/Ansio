@@ -27,7 +27,6 @@ namespace parser {
 
 		int parse_csi_num(int default_num, int invalid_num);
 		void parse_csi();
-		void parse_esc();
 
 	public:
 		Parser(std::ifstream *ifile, merx::Merx *edit_area, int width, int height);

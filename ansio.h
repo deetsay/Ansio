@@ -9,6 +9,8 @@
 namespace ansio {
 	class Ansio {
 	public:
+		float zoom;
+
 		int width;
 	    int height;
 
@@ -21,7 +23,7 @@ namespace ansio {
 
 		merx::Merx *edit_area;
 
-		Ansio(merx::Font *font, merx::Palette *palette);
+		Ansio(merx::Font *font, merx::Palette *palette, int width, int height);
 		virtual ~Ansio();
 	};
 }

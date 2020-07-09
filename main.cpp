@@ -3,8 +3,6 @@
  *
  *	TODO:
  *	- open file from command line
- *  - fix load & save
- *   - linefeeds
  *  - undo
  *  - bold
  *  - italic
@@ -22,6 +20,7 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 #include "imgui.h"
+//#include "imgui_internal.h"
 #include "imgui_impl_sdl.h"
 #include "imgui_impl_opengl2.h"
 #include "nfd.h"
@@ -34,9 +33,10 @@
 #include "resources/potnoodle.c"
 #include "resources/xen.c"
 #include "resources/lamers.c"
+#include "resources/petscii-ucase.c"
+#include "resources/petscii-lcase.c"
 
 std::string *filename;
-merx::Font topaz1200font;
 
 void load(ansio::Ansio *a) {
 	char *file = NULL;
@@ -152,13 +152,18 @@ void save(ansio::Ansio *a) {
 }
 
 void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg,
-	const ImVec2 p, bool bold) {
+	const ImVec2 p, bool bold, float zoom) {
+
+	if (ImGui::IsRectVisible(ImVec2(font->width*zoom, font->height*zoom))==false) {
+		ImGui::Dummy(ImVec2(font->width*zoom, font->height*zoom));
+		return;
+	}
 
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 	draw_list->AddImage(
 		(void *)(intptr_t)font->gl_texture,
 		p,
-		ImVec2(p.x+font->width, p.y+font->height),
+		ImVec2(p.x+(font->width*zoom), p.y+(font->height*zoom)),
 		font->lit,
 		ImVec2(font->lit.x+0.0078125f, font->lit.y+0.0078125f),
 		ImGui::GetColorU32(bg));
@@ -168,14 +173,14 @@ void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg,
 		draw_list->AddImage(
 			(void *)(intptr_t)font->gl_texture,
 			ImVec2(p.x+1, p.y),
-			ImVec2(p.x+1+font->width, p.y+font->height),
+			ImVec2(p.x+1+(font->width*zoom), p.y+(font->height*zoom)),
 			ImVec2(x, y),
 			ImVec2(x+0.0625f, y+0.0625f),
 			ImGui::GetColorU32(fg));
 	}
 	ImGui::Image(
 		(void *)(intptr_t)font->gl_texture,
-		ImVec2(font->width, font->height),
+		ImVec2(font->width*zoom, font->height*zoom),
 		ImVec2(x, y),
 		ImVec2(x+0.0625f, y+0.0625f),
 		fg,
@@ -183,10 +188,10 @@ void draw_char(merx::Font *font, int character, ImVec4 fg, ImVec4 bg,
 	);
 }
 
-void set_window_size(SDL_Window *window, ansio::Ansio *a) {
+/*void set_window_size(SDL_Window *window, ansio::Ansio *a) {
 	SDL_SetWindowSize(window,
 		a->font->width*(a->width+16+8), a->font->height*(a->height+2)+32);
-}
+}*/
 
 int main(int argc, char *argv[]) {
 
@@ -200,7 +205,7 @@ int main(int argc, char *argv[]) {
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
     SDL_Window* window = SDL_CreateWindow("Ansio", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 8*(80+16+8), 27*16, window_flags);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
@@ -217,10 +222,10 @@ int main(int argc, char *argv[]) {
 
     // Setup Dear ImGui style
     //ImGui::StyleColorsLight();
-    ImGui::StyleColorsClassic();
+    //ImGui::StyleColorsClassic();
     ImGuiStyle& style = ImGui::GetStyle();
     style.FrameBorderSize = 0.0f;
-    style.FramePadding = ImVec2(0.0f,0.0f);
+	style.FramePadding = ImVec2(0.0f,0.0f);
 
     style.WindowRounding = 0.0f;
     style.ChildRounding = 0.0f;
@@ -230,100 +235,161 @@ int main(int argc, char *argv[]) {
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL2_Init();
 
-	//merx::Font *topaz500font = new merx::Font(topaz500, sizeof(topaz500));
+	std::vector<merx::Font*> fonts;
+
 	merx::Font topaz500font;
-	topaz500font.init(topaz500, sizeof(topaz500));
+	topaz500font.init("Topaz", topaz500, sizeof(topaz500), true);
+	fonts.push_back(&topaz500font);
 	merx::Font topaz1200font;
-	topaz1200font.init(topaz1200, sizeof(topaz1200));
+	topaz1200font.init("Topaz New", topaz1200, sizeof(topaz1200), true);
 	topaz1200font.width=8;
 	topaz1200font.height=16;
+	fonts.push_back(&topaz1200font);
 	merx::Font potnoodlefont;
-	potnoodlefont.init(potnoodle, sizeof(potnoodle));
-	merx::Font xenfont;
-	xenfont.init(xen, sizeof(xen));
+	potnoodlefont.init("P0T-NOoDLE", potnoodle, sizeof(potnoodle), true);
+	fonts.push_back(&potnoodlefont);
 	merx::Font lamersfont;
-	lamersfont.init(lamers, sizeof(lamers));
+	lamersfont.init("EGA/VGA", lamers, sizeof(lamers), false);
+	fonts.push_back(&lamersfont);
+	merx::Font xenfont;
+	xenfont.init("Xen", xen, sizeof(xen), true);
+	fonts.push_back(&xenfont);
+	merx::Font petscii_ucfont;
+	petscii_ucfont.init("PETSCII Uppercase", petscii_ucase, sizeof(petscii_ucase), false);
+	fonts.push_back(&petscii_ucfont);
+	merx::Font petscii_lcfont;
+	petscii_lcfont.init("PETSCII Lowercase", petscii_lcase, sizeof(petscii_lcase), false);
+	fonts.push_back(&petscii_lcfont);
+
+	std::vector<merx::Palette*> palettes;
 
 	merx::Palette ks13pal;
-	ks13pal.size=4;
-	ks13pal.color[0] = ImVec4(0.0f, 0.332f, 0.664f, 1.0f);
-	ks13pal.color[1] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	ks13pal.color[2] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	ks13pal.color[3] = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);
+	ks13pal.name = "Workbench";
+	ks13pal.push_back(0x0055aa);
+	ks13pal.push_back(0xffffff);
+	ks13pal.push_back(0x000000);
+	ks13pal.push_back(0xff8800);
+	palettes.push_back(&ks13pal);
+
 	merx::Palette amipal;
-	amipal.size=8;
-	amipal.color[0] = ImVec4(0.664f, 0.664f, 0.664f, 1.0f);
-	amipal.color[1] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	amipal.color[2] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	amipal.color[3] = ImVec4(0.3984f, 0.5313f, 0.73f, 1.0f);
-	amipal.color[4] = ImVec4(0.9297f, 0.2656f, 0.2656f, 1.0f);
-	amipal.color[5] = ImVec4(0.332f, 0.8633f, 0.332f, 1.0f);
-	amipal.color[6] = ImVec4(0.0f, 0.2656f, 0.8633f, 1.0f);
-	amipal.color[7] = ImVec4(0.9297f, 0.5977f, 0.0f, 1.0f);
+	amipal.name = "Workbench New";
+	amipal.push_back(0xaaaaaa);
+	amipal.push_back(0x000000);
+	amipal.push_back(0xffffff);
+	amipal.push_back(0x6688bb);
+	amipal.push_back(0xee4444);
+	amipal.push_back(0x55dd55);
+	amipal.push_back(0x0044dd);
+	amipal.push_back(0xee9900);
+	palettes.push_back(&amipal);
 
 	merx::Palette mwbpal;
-	mwbpal.size=8;
-	mwbpal.color[0] = ImVec4(0.582f, 0.582f, 0.582f, 1.0f);
-	mwbpal.color[1] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	mwbpal.color[2] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	mwbpal.color[3] = ImVec4(0.23f, 0.4023f, 0.6328f, 1.0f);
-	mwbpal.color[4] = ImVec4(0.48f, 0.48f, 0.48f, 1.0f);
-	mwbpal.color[5] = ImVec4(0.6836f, 0.6836f, 0.6836f, 1.0f);
-	mwbpal.color[6] = ImVec4(0.664f, 0.5625f, 0.4844f, 1.0f);
-	mwbpal.color[7] = ImVec4(1.0f, 0.66f, 0.5898f, 1.0f);
+	mwbpal.name = "MagicWB";
+	mwbpal.push_back(0x959595);
+	mwbpal.push_back(0x000000);
+	mwbpal.push_back(0xffffff);
+	mwbpal.push_back(0x3b67a2);
+	mwbpal.push_back(0x7b7b7b);
+	mwbpal.push_back(0xafafaf);
+	mwbpal.push_back(0xaa907c);
+	mwbpal.push_back(0xffa997);
+	palettes.push_back(&mwbpal);
 
 	merx::Palette bterm;
-	bterm.size=8;
-	bterm.color[0] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	bterm.color[1] = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
-	bterm.color[2] = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
-	bterm.color[3] = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
-	bterm.color[4] = ImVec4(0.0f, 0.0f, 1.0f, 1.0f);
-	bterm.color[5] = ImVec4(1.0f, 0.0f, 1.0f, 1.0f);
-	bterm.color[6] = ImVec4(0.0f, 1.0f, 1.0f, 1.0f);
-	bterm.color[7] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	bterm.name = "Terminal";
+	bterm.push_back(0x000000);
+	bterm.push_back(0xff0000);
+	bterm.push_back(0x00ff00);
+	bterm.push_back(0xffff00);
+	bterm.push_back(0x0000ff);
+	bterm.push_back(0xff00ff);
+	bterm.push_back(0x00ffff);
+	bterm.push_back(0xffffff);
+	palettes.push_back(&bterm);
 
 	merx::Palette dterm;
-	dterm.size=16;
-	dterm.color[0] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	dterm.color[1] = ImVec4(0.73f, 0.0f, 0.0f, 1.0f);
-	dterm.color[2] = ImVec4(0.0f, 0.73f, 0.0f, 1.0f);
-	dterm.color[3] = ImVec4(0.73f, 0.73f, 0.0f, 1.0f);
-	dterm.color[4] = ImVec4(0.0f, 0.0f, 0.73f, 1.0f);
-	dterm.color[5] = ImVec4(0.73f, 0.0f, 0.73f, 1.0f);
-	dterm.color[6] = ImVec4(0.0f, 0.73f, 0.73f, 1.0f);
-	dterm.color[7] = ImVec4(0.73f, 0.73f, 0.73f, 1.0f);
-	dterm.color[8] = ImVec4(0.33f, 0.33f, 0.33f, 1.0f);
-	dterm.color[9] = ImVec4(1.0f, 0.33f, 0.33f, 1.0f);
-	dterm.color[10] = ImVec4(0.33f, 1.0f, 0.33f, 1.0f);
-	dterm.color[11] = ImVec4(1.0f, 1.0f, 0.33f, 1.0f);
-	dterm.color[12] = ImVec4(0.33f, 0.33f, 1.0f, 1.0f);
-	dterm.color[13] = ImVec4(1.0f, 0.33f, 1.0f, 1.0f);
-	dterm.color[14] = ImVec4(0.33f, 1.0f, 1.0f, 1.0f);
-	dterm.color[15] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	dterm.name = "Terminal Dim";
+	dterm.push_back(0x000000);
+	dterm.push_back(0xbb0000);
+	dterm.push_back(0x00bb00);
+	dterm.push_back(0xbbbb00);
+	dterm.push_back(0x0000bb);
+	dterm.push_back(0xbb00bb);
+	dterm.push_back(0x00bbbb);
+	dterm.push_back(0xbbbbbb);
+	dterm.push_back(0x555555);
+	dterm.push_back(0xff5555);
+	dterm.push_back(0x55ff55);
+	dterm.push_back(0xffff55);
+	dterm.push_back(0x5555ff);
+	dterm.push_back(0xff55ff);
+	dterm.push_back(0x55ffff);
+	dterm.push_back(0xffffff);
+	palettes.push_back(&dterm);
 
 	merx::Palette vgapal;
-	vgapal.size=16;
-	vgapal.color[0] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-	vgapal.color[1] = ImVec4(0.0f, 0.0f, 0.664f, 1.0f);
-	vgapal.color[2] = ImVec4(0.0f, 0.664f, 0.0f, 1.0f);
-	vgapal.color[3] = ImVec4(0.0f, 0.664f, 0.664f, 1.0f);
-	vgapal.color[4] = ImVec4(0.664f, 0.0f, 0.0f, 1.0f);
-	vgapal.color[5] = ImVec4(0.664f, 0.0f, 0.664f, 1.0f);
-	vgapal.color[6] = ImVec4(0.664f, 0.332f, 0.0f, 1.0f);
-	vgapal.color[7] = ImVec4(0.664f, 0.664f, 0.664f, 1.0f);
-	vgapal.color[8] = ImVec4(0.332f, 0.332f, 0.332f, 1.0f);
-	vgapal.color[9] = ImVec4(0.332f, 0.332f, 1.0f, 1.0f);
-	vgapal.color[10] = ImVec4(0.332f, 1.0f, 0.332f, 1.0f);
-	vgapal.color[11] = ImVec4(0.332f, 1.0f, 1.0f, 1.0f);
-	vgapal.color[12] = ImVec4(1.0f, 0.332f, 0.332f, 1.0f);
-	vgapal.color[13] = ImVec4(1.0f, 0.332f, 1.0f, 1.0f);
-	vgapal.color[14] = ImVec4(1.0f, 1.0f, 0.332f, 1.0f);
-	vgapal.color[15] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	vgapal.name = "VGA";
+	vgapal.push_back(0x000000);
+	vgapal.push_back(0x0000aa);
+	vgapal.push_back(0x00aa00);
+	vgapal.push_back(0x00aaaa);
+	vgapal.push_back(0xaa0000);
+	vgapal.push_back(0xaa00aa);
+	vgapal.push_back(0xaa5500);
+	vgapal.push_back(0xaaaaaa);
+	vgapal.push_back(0x555555);
+	vgapal.push_back(0x5555ff);
+	vgapal.push_back(0x55ff55);
+	vgapal.push_back(0x55ffff);
+	vgapal.push_back(0xff5555);
+	vgapal.push_back(0xff55ff);
+	vgapal.push_back(0xffff55);
+	vgapal.push_back(0xffffff);
+	palettes.push_back(&vgapal);
 
-    ansio::Ansio *a = new ansio::Ansio(&topaz1200font, &bterm);
+	merx::Palette pepto;
+	pepto.name = "Pepto";
+	pepto.push_back(0x000000);
+	pepto.push_back(0xFFFFFF);
+	pepto.push_back(0x68372B);
+	pepto.push_back(0x70A4B2);
+	pepto.push_back(0x6F3D86);
+	pepto.push_back(0x588D43);
+	pepto.push_back(0x352879);
+	pepto.push_back(0xB8C76F);
+	pepto.push_back(0x6F4F25);
+	pepto.push_back(0x433900);
+	pepto.push_back(0x9A6759);
+	pepto.push_back(0x444444);
+	pepto.push_back(0x6C6C6C);
+	pepto.push_back(0x9AD284);
+	pepto.push_back(0x6C5EB5);
+	pepto.push_back(0x959595);
+	palettes.push_back(&pepto);
 
-	set_window_size(window, a);
+	merx::Palette colodore;
+	colodore.name = "Colodore";
+	colodore.push_back(0x000000);
+	colodore.push_back(0xffffff);
+	colodore.push_back(0x813338);
+	colodore.push_back(0x75cec8);
+	colodore.push_back(0x8e3c97);
+	colodore.push_back(0x56ac4d);
+	colodore.push_back(0x2e2c9b);
+	colodore.push_back(0xedf171);
+	colodore.push_back(0x8e5029);
+	colodore.push_back(0x553800);
+	colodore.push_back(0xc46c71);
+	colodore.push_back(0x4a4a4a);
+	colodore.push_back(0x7b7b7b);
+	colodore.push_back(0xa9ff9f);
+	colodore.push_back(0x706deb);
+	colodore.push_back(0xb2b2b2);
+	palettes.push_back(&colodore);
+
+    ansio::Ansio *a = new ansio::Ansio(&topaz1200font, &bterm, 80, 25);
+
+	//set_window_size(window, a);
 
 	filename = NULL;
 	bool done = false;
@@ -332,6 +398,7 @@ int main(int argc, char *argv[]) {
     while (done == false) {
 		int action = 0;
 		bool showcursor = true;
+		bool make_copy = false;
 		merx::Undo hover;
 		hover.character = -1;
 
@@ -348,6 +415,8 @@ int main(int argc, char *argv[]) {
 				} else if (event.key.keysym.mod == KMOD_RCTRL || event.key.keysym.mod == KMOD_LCTRL) {
 					if (action == SDLK_q) {
 						done = true;
+					} else if (action == SDLK_c) {
+						make_copy = true;
 					} else if (action == SDLK_o) {
 						load(a);
 					} else if (action == SDLK_s) {
@@ -385,85 +454,117 @@ int main(int argc, char *argv[]) {
 		ImGui::Begin("Ansio Main", NULL,
 	    	ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing
 	    	|ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize
-	    	|ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar);
+	    	|ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar
+			|ImGuiWindowFlags_NoScrollbar);
 
+		char menu_action=0;
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("Menu")) {
-				if (ImGui::MenuItem("Open", "CTRL+O")) {
+				if (ImGui::MenuItem("New", "CTRL-N")) {
+					menu_action='n';
+				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Open", "CTRL-O")) {
 					load(a);
 				}
-				if (ImGui::MenuItem("Save", "CTRL+S")) {
+				if (ImGui::MenuItem("Save", "CTRL-S")) {
 					save(a);
 				}
 				ImGui::Separator();
-				if (ImGui::MenuItem("Quit", "CTRL+Q")) {
+				if (ImGui::MenuItem("Quit", "CTRL-Q")) {
 					done = true;
+				}
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Edit")) {
+				if (ImGui::MenuItem("Copy", "CTRL-C")) {
+					make_copy = true;
 				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Font")) {
 				static bool dblpal = false;
-				ImGui::Checkbox("Scandoubler", &dblpal);
-				if (a->font->height==16 && dblpal==true) {
-					a->font->height=8;
-					set_window_size(window, a);
+				if (a->font->scandoubler == true) {
+					ImGui::Checkbox("Scandoubler", &dblpal);
+					if (a->font->height==16 && dblpal==true) {
+						a->font->height=8;
+					}
+					if (a->font->height==8 && dblpal==false) {
+						a->font->height=16;
+					}
+					ImGui::Separator();
 				}
-				if (a->font->height==8 && dblpal==false) {
-					a->font->height=16;
-					set_window_size(window, a);
+				static int fontsel = 0;
+				int i=0;
+				for (merx::Font *font : fonts) {
+					if (ImGui::RadioButton(font->name.c_str(), &fontsel, i++)) {
+						a->font = font;
+					}
 				}
-				ImGui::Separator();
-				static int fontsel = 1;
-				if (ImGui::RadioButton("Topaz", &fontsel, 0)) {
+				/*if (ImGui::RadioButton("Topaz", &fontsel, 0)) {
 					a->font = &topaz500font;
 					a->font->width=8; a->font->height=16;
-					set_window_size(window, a);
 				}
 				if (ImGui::RadioButton("Topaz New", &fontsel, 1)) {
 					a->font = &topaz1200font;
 					a->font->width=8; a->font->height=16;
-					set_window_size(window, a);
 				}
 				if (ImGui::RadioButton("P0T-NOoDLE", &fontsel, 2)) {
 					a->font = &potnoodlefont;
 					a->font->width=8; a->font->height=16;
-					set_window_size(window, a);
 				}
 				if (ImGui::RadioButton("EGA/VGA", &fontsel, 3)) {
 					a->font = &lamersfont;
-					set_window_size(window, a);
 				}
 				if (ImGui::RadioButton("Xen", &fontsel, 4)) {
 					a->font = &xenfont;
 					a->font->height=16;
-					set_window_size(window, a);
 				}
+				if (ImGui::RadioButton("PETSCII Uppercase", &fontsel, 5)) {
+					a->font = &petscii_ucfont;
+					a->font->height=8;
+				}
+				if (ImGui::RadioButton("PETSCII Lowercase", &fontsel, 6)) {
+					a->font = &petscii_lcfont;
+					a->font->height=8;
+				}*/
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Palette")) {
 				static int palsel = 3;
-				if (ImGui::RadioButton("Workbench", &palsel, 0)) {
-					a->palette = &ks13pal;
-				}
-				if (ImGui::RadioButton("Workbench New", &palsel, 1)) {
-					a->palette = &amipal;
-				}
-				if (ImGui::RadioButton("MagicWB", &palsel, 2)) {
-					a->palette = &mwbpal;
-				}
-				if (ImGui::RadioButton("Terminal", &palsel, 3)) {
-					a->palette = &bterm;
-				}
-				if (ImGui::RadioButton("Terminal Dim", &palsel, 4)) {
-					a->palette = &dterm;
-				}
-				if (ImGui::RadioButton("VGA", &palsel, 5)) {
-					a->palette = &vgapal;
+				int i=0;
+				for (merx::Palette *pal : palettes) {
+					if (ImGui::RadioButton(pal->name.c_str(), &palsel, i++)) {
+						a->palette = pal;
+					}
 				}
 				ImGui::EndMenu();
 			}
 			ImGui::EndMainMenuBar();
 		}
+
+		if (menu_action=='n') {
+			ImGui::OpenPopup("New");
+		}
+		//bool newopen = false;
+		if (ImGui::BeginPopupModal("New")) {
+			ImGui::Text("Foo");
+			static int in_width = 80;
+			static int in_height = 25;
+			ImGui::InputInt("Width", &in_width);
+			ImGui::InputInt("Height", &in_height);
+			if (ImGui::Button("OK", ImVec2(120, 40))) {
+				delete a;
+				a = new ansio::Ansio(&topaz1200font, &bterm, in_width, in_height);
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 40))) {
+				ImGui::CloseCurrentPopup();
+			}
+		   ImGui::EndPopup();
+		}
+
 
 
 		ImGui::Columns(2, NULL, false);
@@ -476,9 +577,12 @@ int main(int argc, char *argv[]) {
 			for (int x=0; x<16; x++, i++) {
 				const ImVec2 p = ImGui::GetCursorScreenPos();
 				draw_char(a->font, i, a->palette->get_color(a->current.fg_color), a->palette->get_color(a->current.bg_color), p,
-					((a->palette->size <= 8) && (a->current.fg_color>=8)));
+					a->palette->is_bold(a->current.fg_color), 1.0f);
 				if (ImGui::IsItemHovered()) {
 					if (ImGui::IsMouseDown(0)) {
+						a->current.character = i;
+					}
+					if (make_copy == true) {
 						a->current.character = i;
 					}
 				}
@@ -491,10 +595,8 @@ int main(int argc, char *argv[]) {
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, a->palette->get_color(a->current.bg_color));
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, a->palette->get_color(a->current.bg_color));
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-		//ImGui::NextColumn();
-		//ImGui::SetColumnWidth(-1, a->font->width*4);
 		int x=0;
-		for (int pal=0; pal<a->palette->size; pal++) {
+		for (int pal=0; pal<a->palette->color.size(); pal++) {
 			const ImVec2 p = ImGui::GetCursorScreenPos();
 			if (pal==a->current.fg_color) {
 				ImGui::PopStyleColor();
@@ -536,12 +638,42 @@ int main(int argc, char *argv[]) {
 
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
+		float da_w = a->width*a->font->width*a->zoom;
+		float da_h = a->height*a->font->height*a->zoom;
+		ImGui::SetNextWindowContentSize(ImVec2(da_w, da_h));
+
+		float dw_w = ImGui::GetWindowContentRegionMax().x-((a->font->width+1)*16)-8;
+		float dw_h = ImGui::GetWindowContentRegionMax().y-34;
+
+		float dwpad_x = 0.0f;
+		float dwpad_y = 0.0f;
+
+		if (da_w < dw_w) {
+			dwpad_x = (dw_w-da_w)/2;
+		}
+		if (da_h < dw_h) {
+			dwpad_y = (dw_h-da_h)/2;
+		}
+
+		const ImVec2 dw_p = ImGui::GetCursorScreenPos();
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(dwpad_x, dwpad_y));
+
+		ImGui::BeginChild("DrawScrollRegion",
+			ImVec2(dw_w, dw_h),
+			true,
+			ImGuiWindowFlags_AlwaysHorizontalScrollbar
+			| ImGuiWindowFlags_AlwaysVerticalScrollbar
+			| ImGuiWindowFlags_NoScrollWithMouse);
+
+		//ImGui::SetCursorScreenPos(ImVec2(dw_p.x+dwpad_x, dw_p.y+dwpad_y));
+
 		for (int y=0, i=0; y<a->height; y++) {
 			for (int x=0; x<a->width; x++, i++) {
 				merx::Merx *m = &a->edit_area[i];
 				const ImVec2 p = ImGui::GetCursorScreenPos();
 				draw_char(a->font, m->character, a->palette->get_color(m->fg_color), a->palette->get_color(m->bg_color), p,
-					((a->palette->size <= 8) && (m->fg_color>=8)));
+					a->palette->is_bold(m->fg_color), a->zoom);
 				if (ImGui::IsItemHovered()) {
 					showcursor = false;
 					hover.x = x;
@@ -563,7 +695,12 @@ int main(int argc, char *argv[]) {
 						ImVec4 bg = a->palette->get_color(a->current.bg_color);
 						ImVec4 ehb_bg = ImVec4(bg.x, bg.y, bg.z, alpa);
 						draw_char(a->font, a->current.character, ehb_fg, ehb_bg, p,
-							((a->palette->size <= 8) && (a->current.fg_color>=8)));
+							a->palette->is_bold(a->current.fg_color), a->zoom);
+					}
+					if (make_copy == true) {
+						a->current.character = m->character;
+						a->current.fg_color = m->fg_color;
+						a->current.bg_color = m->bg_color;
 					}
 				}
 				if (x<a->width-1) {
@@ -571,6 +708,33 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
+
+		if (ImGui::IsWindowHovered()) {
+			ImGuiIO& io = ImGui::GetIO();
+			float wheel = io.MouseWheel;
+			if (wheel != 0.0f) {
+				a->zoom = a->zoom + (wheel / 8);
+				if (a->zoom < 1.0f) {
+					a->zoom = 1.0f;
+				}
+				float new_w = a->width*a->font->width*a->zoom;
+				float new_h = a->height*a->font->height*a->zoom;
+				float dq_x;
+				float dq_y;
+				/*if (wheel > 0.0f) {
+					dq_x = (1.2f*(io.MousePos.x-dw_p.x)/dw_w)-0.1f;
+					dq_y = (1.2f*(io.MousePos.y-dw_p.y)/dw_h)-0.1f;
+				} else {*/
+					dq_x = (io.MousePos.x-dw_p.x)/dw_w;
+					dq_y = (io.MousePos.y-dw_p.y)/dw_h;
+				//}
+				ImGui::SetScrollX(ImGui::GetScrollX()+((new_w-da_w)*dq_x));
+				ImGui::SetScrollY(ImGui::GetScrollY()+((new_h-da_h)*dq_y));
+			}
+		}
+
+		ImGui::EndChild();
+		ImGui::PopStyleVar();
 
 		if (hover.character != -1) {
 			ImGui::Text("x=%d y=%d char=%d", hover.x, hover.y, hover.character);
@@ -582,7 +746,6 @@ int main(int argc, char *argv[]) {
 
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-
 
 		if (showcursor == true) {
 			SDL_ShowCursor(SDL_ENABLE);

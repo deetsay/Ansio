@@ -13,13 +13,15 @@
 #include "merx.h"
 
 namespace ansio {
-	Ansio::Ansio(merx::Font *font, merx::Palette *palette) {
+	Ansio::Ansio(merx::Font *font, merx::Palette *palette, int width, int height) {
+
+		this->zoom = 1.0f;
 
 		this->font = font;
 		this->palette = palette;
 
-		width = 80;
-		height = 30;
+		this->width = width;
+		this->height = height;
 
 		edit_area = new merx::Merx[width*height];
 		for (int i=0; i<width*height; i++) {
