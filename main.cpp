@@ -15,6 +15,8 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <chrono>
+#include <thread>
 #include <math.h>
 
 #include <SDL.h>
@@ -37,8 +39,11 @@
 #include "resources/petscii-lcase.c"
 
 std::string *filename;
+std::ifstream ifile;
+parser::Parser *parsa;
 
 void load(ansio::Ansio *a) {
+	parsa = NULL;
 	char *file = NULL;
 	nfdresult_t res = NFD_OpenDialog(NULL, NULL, &file);
 	if (res == NFD_OKAY) {
@@ -49,13 +54,10 @@ void load(ansio::Ansio *a) {
 		filename = new std::string(file);
 		free(file);
 
-		std::ifstream ifile;
 		ifile.open(filename->c_str(), std::ios::in|std::ios::binary);
 		if (ifile.is_open()) {
-			parser::Parser *parsa = new parser::Parser(&ifile, a->edit_area, a->width, a->height);
-			parsa->parse_ansi();
-			delete parsa;
-			ifile.close();
+			parsa = new parser::Parser(&ifile, a->edit_area, a->width, a->height);
+			parsa->reset();
 		}
 	} else if (res == NFD_ERROR) {
 		std::cout << "Error: " << NFD_GetError() << std::endl;
@@ -464,8 +466,8 @@ int main(int argc, char *argv[]) {
 					menu_action='n';
 				}
 				ImGui::Separator();
-				if (ImGui::MenuItem("Open", "CTRL-O")) {
-					load(a);
+				if (ImGui::MenuItem("Load", "CTRL-L")) {
+					menu_action='l';
 				}
 				if (ImGui::MenuItem("Save", "CTRL-S")) {
 					save(a);
@@ -501,33 +503,6 @@ int main(int argc, char *argv[]) {
 						a->font = font;
 					}
 				}
-				/*if (ImGui::RadioButton("Topaz", &fontsel, 0)) {
-					a->font = &topaz500font;
-					a->font->width=8; a->font->height=16;
-				}
-				if (ImGui::RadioButton("Topaz New", &fontsel, 1)) {
-					a->font = &topaz1200font;
-					a->font->width=8; a->font->height=16;
-				}
-				if (ImGui::RadioButton("P0T-NOoDLE", &fontsel, 2)) {
-					a->font = &potnoodlefont;
-					a->font->width=8; a->font->height=16;
-				}
-				if (ImGui::RadioButton("EGA/VGA", &fontsel, 3)) {
-					a->font = &lamersfont;
-				}
-				if (ImGui::RadioButton("Xen", &fontsel, 4)) {
-					a->font = &xenfont;
-					a->font->height=16;
-				}
-				if (ImGui::RadioButton("PETSCII Uppercase", &fontsel, 5)) {
-					a->font = &petscii_ucfont;
-					a->font->height=8;
-				}
-				if (ImGui::RadioButton("PETSCII Lowercase", &fontsel, 6)) {
-					a->font = &petscii_lcfont;
-					a->font->height=8;
-				}*/
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Palette")) {
@@ -545,6 +520,10 @@ int main(int argc, char *argv[]) {
 
 		if (menu_action=='n') {
 			ImGui::OpenPopup("New");
+		}
+		if (menu_action=='l') {
+			load(a);
+			ImGui::OpenPopup("Load");
 		}
 		//bool newopen = false;
 		if (ImGui::BeginPopupModal("New")) {
@@ -564,8 +543,46 @@ int main(int argc, char *argv[]) {
 			}
 		   ImGui::EndPopup();
 		}
+		if (ImGui::BeginPopupModal("Load")) {
+			if (parsa != NULL) {
+				int target = 20;
+				int last_num = 0;
+				do {
+					last_num = parsa->parse_ansi();
+					target -= last_num;
+				} while (target >= 0 && last_num > 0);
+				if (last_num == 0) {
+					delete parsa;
+					parsa = NULL;
+				}
+			}
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+			for (int y=0, i=0; y<a->height; y++) {
+				for (int x=0; x<a->width; x++, i++) {
+					merx::Merx *m = &a->edit_area[i];
+					const ImVec2 p = ImGui::GetCursorScreenPos();
+					draw_char(a->font, m->character, a->palette->get_color(m->fg_color), a->palette->get_color(m->bg_color), p,
+						a->palette->is_bold(m->fg_color), 1.0f);
+					if (x<a->width-1) {
+						ImGui::SameLine();
+					}
+				}
+			}
+			ImGui::PopStyleVar();
 
+			if (parsa != NULL) {
+				if (ImGui::Button("Stop", ImVec2(120, 40))) {
+					delete parsa;
+					parsa = NULL;
+				}
+			} else {
+				if (ImGui::Button("Close", ImVec2(120, 40))) {
+					ImGui::CloseCurrentPopup();
+				}
+			}
 
+			ImGui::EndPopup();
+		}
 
 		ImGui::Columns(2, NULL, false);
 

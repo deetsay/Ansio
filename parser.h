@@ -11,7 +11,9 @@ namespace parser {
 		int csi_idx;
 		bool csi_done;
 
+		int got_chars;
 		char c;
+		bool was_d;
 		bool load_done;
 		int fg_color;
 		int bg_color;
@@ -32,6 +34,7 @@ namespace parser {
 		Parser(std::ifstream *ifile, merx::Merx *edit_area, int width, int height);
 		virtual ~Parser();
 
-		void parse_ansi();
+		void reset();
+		int parse_ansi();
 	};
 }

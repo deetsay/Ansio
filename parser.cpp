@@ -3,15 +3,30 @@
 namespace parser {
 
 	Parser::Parser(std::ifstream *ifile, merx::Merx *edit_area, int width, int height) {
-		fg_color = 7;
-		bg_color = 0;
 		this->ifile = ifile;
 		this->edit_area = edit_area;
 		this->width = width;
 		this->height = height;
 	}
 
+	void Parser::reset() {
+		fg_color = 7;
+		bg_color = 0;
+		x = 0;
+		y = 0;
+		for (int i=0; i<(width*height); i++) {
+			edit_area[i].character = ' ';
+			edit_area[i].fg_color = 7;
+			edit_area[i].bg_color = 0;
+		}
+		was_d = false;
+		load_done = false;
+	}
+
 	Parser::~Parser() {
+		if (ifile != NULL) {
+			ifile->close();
+		}
 	}
 
 	bool Parser::get() {
@@ -19,6 +34,7 @@ namespace parser {
 			load_done = true;
 			return false;
 		}
+		got_chars++;
 		return true;
 	}
 
@@ -26,19 +42,28 @@ namespace parser {
 		if (load_done==true) {
 			return;
 		}
-		int i=(y*width)+x;
-		if (i>=(width*height)) {
-			load_done = true;
-			return;
+		while (x>=width) {
+			x-=width;
+			y++;
 		}
+		while (y >= height) {
+			for (int i=0; i<(width*(height-1)); i++) {
+				edit_area[i].character = edit_area[i+width].character;
+				edit_area[i].fg_color = edit_area[i+width].fg_color;
+				edit_area[i].bg_color = edit_area[i+width].bg_color;
+			}
+			for (int i=width*(height-1); i<(width*height); i++) {
+				edit_area[i].character = ' ';
+				edit_area[i].fg_color = 7;
+				edit_area[i].bg_color = 0;
+			}
+			y--;
+		}
+		int i=(y*width)+x;
 		edit_area[i].character = (unsigned char) character;
 		edit_area[i].fg_color = fg_color;
 		edit_area[i].bg_color = bg_color;
 		x++;
-		if (x>=width) {
-			x=0;
-			y++;
-		}
 	}
 
 	int Parser::parse_csi_num(int default_num, int invalid_num) {
@@ -129,30 +154,31 @@ namespace parser {
 					x = 0;
 				}
 			}
-			if (c=='H') {
+			if (c=='H' || c=='f') {
 				int xset = parse_csi_num(1, -1);
 				int yset = parse_csi_num(1, -1);
 				if (xset >= 1) {
 					x = xset-1;
 				}
+				if (x > width - 1) {
+					x = width - 1;
+				}
 				if (yset >= 1) {
 					y = yset-1;
+				}
+				if (y > height - 1) {
+					y = height - 1;
 				}
 			}
 		}
 	}
 
-	void Parser::parse_ansi() {
-		x = 0;
-		y = 0;
-		for (int i=0; i<(width*height); i++) {
-			edit_area[i].character = ' ';
-			edit_area[i].fg_color = 7;
-			edit_area[i].bg_color = 0;
+	int Parser::parse_ansi() {
+		got_chars = 0;
+		if (load_done==true) {
+			return got_chars;
 		}
-		bool was_d = false;
-		load_done = false;
-		while (load_done==false && get()) {
+		if (get()) {
 			if (was_d && (c!=0x0a)) {
 				write(0x0d);
 				was_d = false;
@@ -169,20 +195,12 @@ namespace parser {
 			} else if (c==0x0a) {
 				x=0;
 				y++;
-				int i=(y*width);
-				if (i>=width*height) {
-					return;
-				}
 				was_d = false;
 			} else if (c==0x09) {
 				write(' ');
-				write(' ');
-				write(' ');
-				write(' ');
-				write(' ');
-				write(' ');
-				write(' ');
-				write(' ');
+				while (x&7!=0) {
+					write(' ');
+				}
 			} else {
 				write(c);
 			}
@@ -190,5 +208,6 @@ namespace parser {
 		if (was_d == true) {
 			write(0x0d);
 		}
+		return got_chars;
 	}
 }
