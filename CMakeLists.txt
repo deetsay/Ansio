@@ -25,17 +25,18 @@ list(APPEND SOURCES main.cpp ansio.cpp merx.cpp parser.cpp)
 
 ############################################################## Everything ImGui
 
-set(IMGUI_DIR ${PROJECT_SOURCE_DIR}/imgui)
+set(IMGUI_DIR ${PROJECT_SOURCE_DIR}/thirdparty/imgui)
 list(APPEND INCLUDES ${IMGUI_DIR})
+list(APPEND INCLUDES ${IMGUI_DIR}/backends)
 list(APPEND SOURCES ${IMGUI_DIR}/imgui.cpp)
 list(APPEND SOURCES ${IMGUI_DIR}/imgui_draw.cpp)
-list(APPEND SOURCES ${IMGUI_DIR}/imgui_impl_opengl2.cpp)
-list(APPEND SOURCES ${IMGUI_DIR}/imgui_impl_sdl.cpp)
+list(APPEND SOURCES ${IMGUI_DIR}/backends/imgui_impl_opengl2.cpp)
+list(APPEND SOURCES ${IMGUI_DIR}/backends/imgui_impl_sdl.cpp)
 list(APPEND SOURCES ${IMGUI_DIR}/imgui_widgets.cpp)
 
 ################################################### Everything NativeFileDialog
 
-set(NFD_DIR ${PROJECT_SOURCE_DIR}/nativefiledialog)
+set(NFD_DIR ${PROJECT_SOURCE_DIR}/thirdparty/nativefiledialog/src)
 list(APPEND INCLUDES ${NFD_DIR}/include)
 list(APPEND SOURCES ${NFD_DIR}/nfd_common.c)
 if(WINDOWS)
@@ -43,7 +44,17 @@ if(WINDOWS)
 elseif(APPLE)
 	list(APPEND SOURCES ${NFD_DIR}/nfd_cocoa.m)
 else()
-	list(APPEND SOURCES ${NFD_DIR}/nfd_zenity.c)
+	list(APPEND SOURCES ${NFD_DIR}/nfd_gtk.c)
+
+	if (PKG_CONFIG_FOUND)
+		pkg_search_module(GTK3 REQUIRED gtk+-3.0)
+		list(APPEND INCLUDES ${GTK3_INCLUDE_DIRS})
+		list(APPEND LIBS ${GTK3_LIBRARIES})
+	else()
+		find_package(GTK3 REQUIRED)
+		list(APPEND INCLUDES ${GTK3_INCLUDE_DIRS})
+		list(APPEND LIBS ${GTK3_LIBRARIES})
+	endif()
 endif()
 
 ############################################################### Everything SDL2

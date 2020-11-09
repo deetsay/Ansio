@@ -781,6 +781,7 @@ int main(int argc, char *argv[]) {
 		delete filename;
 		filename = NULL;
 	}
+
     delete a;
 	a = NULL;
 
